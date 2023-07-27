@@ -1,0 +1,8 @@
+dan heisman - mobility, flexibility, vulnerability, center control, piece coordination, time, speed
+
+https://seblague.github.io/chess-coding-challenge/documentation/
+
+https://www.chessprogramming.org/Evaluation
+https://www.chessprogramming.org/Mobility
+https://www.chessprogramming.org/Alpha-Beta
+https://www.chessprogramming.org/Search
