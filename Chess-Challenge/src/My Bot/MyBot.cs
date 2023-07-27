@@ -4,7 +4,7 @@ using System;
 
 public class MyBot : IChessBot
 {
-    public static Dictionary<PieceType, float> pieceValueLookup = new Dictionary<PieceType, float>() // lookups for piece values
+    static Dictionary<PieceType, float> pieceValueLookup = new Dictionary<PieceType, float>() // lookups for piece values
     {
         {PieceType.None, 0f},
         {PieceType.Pawn, 1f},
@@ -42,7 +42,7 @@ public class MyBot : IChessBot
     }
 
     // evaluate with negamax - scored relative to side to move
-    public float Evaluate(Board board, bool whiteToMove){
+    float Evaluate(Board board, bool whiteToMove){
         // piece lists
         PieceList[] pieces = board.GetAllPieceLists(); // wp(0), wkn(1), wb(2), wr(3), wq(4), wk(5), bp(6), bkn(7), bb(8), br(9), bq(10), bk(11)
 
@@ -61,10 +61,21 @@ public class MyBot : IChessBot
         ulong whiteAttacks = 0;
         ulong blackAttacks = 0;
 
-        // need king (6/11)
+        // need king (5/11)
         // need knight(2/8)
         // need pawns(0/6)
         // need sliders(4/10, 3/9, 1/7)
+        /*
+        a square should only count towards the mobility total if it's safe
+        when is a square safe?
+        - it isn't threatened by the other side
+        - it can be attacked by at least one other friendly piece
+        - can look at it as number of white attacks - number of black attacks per square
+        - 0 is safe, greater than zero is safer, less than zero is unsafe
+
+        how to figure a square's safety?
+        */
+
 
         return whiteToMove ? score : -score; // positive good, negative bad!
     }
