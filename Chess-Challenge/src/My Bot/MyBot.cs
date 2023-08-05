@@ -25,23 +25,30 @@ public class MyBot : IChessBot
         Move moveToPlay = allMoves[rng.Next(allMoves.Length)];
 
         // deep searches are less important with fewer pieces on the board
-        int searchDepth = (int)Math.Ceiling(BitboardHelper.GetNumberOfSetBits(board.AllPiecesBitboard) * 0.2);
+        int searchDepth = 2; // actually deep searches might be better towards the end - current algorithm tends to get into loops
+        // or somehow need to become more aggressive towards the end
+        // when is endgame? how to be more aggressive? look for checks/mates and always play them
 
-        float bestScore = float.NegativeInfinity;
+        float smallestDiff = float.PositiveInfinity;
+        float bestOutcome = float.NegativeInfinity;
+        float worstOutcome = float.PositiveInfinity;
         foreach(Move m in allMoves){
             board.MakeMove(m);
-            float thisScore;// = Evaluate(board, color);
             Console.Write("searching to a depth of " + searchDepth + "... ");
-            thisScore = FindBestOutcome(board, 2, color);
-            board.UndoMove(m);
-            Console.WriteLine("doing " + m.ToString() + " results in score " + thisScore);
-            if(thisScore > bestScore){
-                bestScore = thisScore;
-                moveToPlay = m;
+            float best = FindBestOutcome(board, searchDepth, color);
+            if(best >= bestOutcome){
+                float worst = FindWorstOutcome(board, searchDepth, color);
+                float diff = best - worst;
+                Console.WriteLine("doing " + m.ToString() + " has a score difference of " + best + " - " + worst + " = " + diff);
+                if(diff <= smallestDiff){ // want to minimize difference, and maximize best outcome
+                    smallestDiff = diff;
+                    bestOutcome = best;
+                    worstOutcome = worst;
+                    moveToPlay = m;
+                }
             }
+            board.UndoMove(m);
         }
-
-        if(bestScore < 0) return allMoves[rng.Next(allMoves.Length)];
 
         return moveToPlay;
     }
@@ -61,7 +68,7 @@ public class MyBot : IChessBot
             + pieceValueLookup[PieceType.Knight] * (pieces[2].Count - pieces[8].Count)
             + pieceValueLookup[PieceType.Bishop] * (pieces[1].Count - pieces[7].Count)
             + pieceValueLookup[PieceType.Pawn] * (pieces[0].Count - pieces[6].Count);
-        score += material * 1f; // weight all material
+        score += material * 1.25f; // weight all material
 
         // consider mobility
         // figure out which squares each side can move to
@@ -126,15 +133,28 @@ public class MyBot : IChessBot
         return perspective ? score : -score; // positive good, negative bad!
     }
 
-    float FindBestOutcome(Board state, int currentDepth, bool perspective){
-        if(currentDepth == 0) return Evaluate(state, perspective);
+    // iterative versions?
+    float FindBestOutcome(Board board, int currentDepth, bool perspective){
         float best = float.NegativeInfinity;
-        foreach(Move move in state.GetLegalMoves()){
-            state.MakeMove(move);
-            float score = FindBestOutcome(state, currentDepth - 1, perspective);
-            state.UndoMove(move);
+        if(currentDepth == 0) return Evaluate(board, perspective);
+        foreach(Move move in board.GetLegalMoves()){
+            board.MakeMove(move);
+            float score = FindBestOutcome(board, currentDepth - 1, perspective);
+            board.UndoMove(move);
             if(score > best) best = score;
         }
         return best;
+    }
+
+    float FindWorstOutcome(Board board, int currentDepth, bool perspective){
+        if(currentDepth == 0) return Evaluate(board, perspective);
+        float worst = float.PositiveInfinity;
+        foreach(Move move in board.GetLegalMoves()){
+            board.MakeMove(move);
+            float score = FindWorstOutcome(board, currentDepth - 1, perspective);
+            board.UndoMove(move);
+            if(score < worst) worst = score;
+        }
+        return worst;
     }
 }
