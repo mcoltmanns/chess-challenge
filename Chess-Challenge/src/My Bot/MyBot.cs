@@ -15,6 +15,8 @@ public class MyBot : IChessBot
         {PieceType.King, 10f}
     };
 
+    static Dictionary<ulong, Tuple<float, float>> stateInfo = new Dictionary<ulong, Tuple<float, float>>();
+
     public Move Think(Board board, Timer timer)
     {
         Move[] allMoves = board.GetLegalMoves();
@@ -55,11 +57,10 @@ public class MyBot : IChessBot
 
     // evaluate with negamax - scored relative to side specified
     float Evaluate(Board board, bool perspective){
+        float score = 0f;
         // all evaluations in here are done from white's side, with positive good/negative bad. then depending on perspective, multiply by -1
         // piece lists
         PieceList[] pieces = board.GetAllPieceLists(); // wp(0), wkn(1), wb(2), wr(3), wq(4), wk(5), bp(6), bkn(7), bb(8), br(9), bq(10), bk(11)
-
-        float score = 0f;
 
         // consider material
         float material = pieceValueLookup[PieceType.King] * (pieces[5].Count - pieces[11].Count)
@@ -121,14 +122,14 @@ public class MyBot : IChessBot
                 }
             }
         }
-        score += (BitboardHelper.GetNumberOfSetBits(whiteMovesBb) - BitboardHelper.GetNumberOfSetBits(blackMovesBb)) * 0.1f; // weighted mobility addition
+        score += (BitboardHelper.GetNumberOfSetBits(whiteMovesBb) - BitboardHelper.GetNumberOfSetBits(blackMovesBb)) * 0.2f; // weighted mobility addition - mobility is good to develop early
 
-        // should consider capture potential?
+        // capture potential
         float captureScore = 0f;
         foreach(Move m in board.GetLegalMoves(true)){
             captureScore += pieceValueLookup[m.CapturePieceType];
         }
-        score += (board.IsWhiteToMove ? captureScore : -captureScore) * 1f;
+        score += (board.IsWhiteToMove ? captureScore : -captureScore) * 1f;// + (board.PlyCount * 0.1f); // captures are more important later on
 
         return perspective ? score : -score; // positive good, negative bad!
     }
@@ -138,8 +139,11 @@ public class MyBot : IChessBot
         float best = float.NegativeInfinity;
         if(currentDepth == 0) return Evaluate(board, perspective);
         foreach(Move move in board.GetLegalMoves()){
-            board.MakeMove(move);
-            float score = FindBestOutcome(board, currentDepth - 1, perspective);
+            board.MakeMove(move); // can't be sure what move the opponent might make, so better to check all of them
+            ulong key = board.ZobristKey;
+            float score;
+            if(stateInfo.ContainsKey(key)) score = stateInfo[key].Item1;
+            else score = FindBestOutcome(board, currentDepth - 1, perspective);
             board.UndoMove(move);
             if(score > best) best = score;
         }
@@ -151,7 +155,10 @@ public class MyBot : IChessBot
         float worst = float.PositiveInfinity;
         foreach(Move move in board.GetLegalMoves()){
             board.MakeMove(move);
-            float score = FindWorstOutcome(board, currentDepth - 1, perspective);
+            ulong key = board.ZobristKey;
+            float score;
+            if(stateInfo.ContainsKey(key)) score = stateInfo[key].Item2;
+            else score = FindWorstOutcome(board, currentDepth - 1, perspective);
             board.UndoMove(move);
             if(score < worst) worst = score;
         }
