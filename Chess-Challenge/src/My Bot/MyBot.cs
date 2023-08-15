@@ -15,49 +15,18 @@ public class MyBot : IChessBot
         {PieceType.King, 20000}
     };
 
-    // table sources: https://i.stack.imgur.com/hxGdi.png
-    double[] knightValues = {
-        -5, -4, -3, -3, -3, -3, -4, -5,
-        -4, -2, 0, 0, 0, 0, -2, -4,
-        -3, 0, 1, 1.5, 1.5, 1, 0, -3,
-        -3, 0.5, 1.5, 2, 2, 1.5, 0.5, -3,
-        -3, 0.5, 1.5, 2, 2, 1.5, 0.5, -3,
-        -3, 0, 1, 1.5, 1.5, 1, 0, -3,
-        -4, -2, 0, 0, 0, 0, -2, -4,
-        -5, -4, -3, -3, -3, -3, -4, -5
-    };
-
-    double[] pawnValues = {
-        0, 0, 0, 0, 0, 0, 0, 0,
-        5, 5, 5, 5, 5, 5, 5, 5,
-        1, 1, 2, 3, 3, 2, 1, 1,
-        0.5, 0.5, 1, 2.5, 2.5, 1, 0.5, 0.5,
-        0, 0, 0, 2, 2, 0, 0, 0,
-        0.5, -0.5, -1, 0, 0, -1, -0.5, 0.5,
-        0.5, 1, 1, -2, -2, 1, 1, 0.5,
-        0, 0, 0, 0, 0, 0, 0, 0
-    };
-
-    double[] bishopValues = {
-        -2, -1, -1, -1, -1, -1, -1, -2,
-        -1, 0, 0, 0, 0, 0, 0, -1,
-        -1, 0, 0.5, 1, 1, 0.5, 0, -1,
-        -1, 0.5, 0.5, 1, 1, 0.5, 0.5, -1,
-        -1, 0, 1, 1, 1, 1, 0, -1,
-        -1, 1, 1, 1, 1, 1, 1, -1,
-        -1, 0.5, 0, 0, 0, 0, 0.5, -1,
-        -2, -1, -1, -1, -1, -1, -1, -2
-    };
+    Dictionary<ulong, (double, int, int)> transpTable = new Dictionary<ulong, (double, int, int)>(); // transposition table: zobristkey -> score, depth, node type (0: true value - 1: upper bound - 2: lower bound)
 
     public Move Think(Board board, Timer timer)
     {
-        Move[] allMoves = board.GetLegalMoves();
+        System.Span<Move> moves = stackalloc Move[40];
+        board.GetLegalMovesNonAlloc(ref moves);
 
-        Move moveToPlay = allMoves[new Random().Next(allMoves.Length)];
+        Move moveToPlay = moves[new Random().Next(moves.Length)];
         double bestOutcome = double.NegativeInfinity;
-        foreach(Move m in allMoves){
+        foreach(Move m in moves){
             board.MakeMove(m);
-            double alphaBeta = AlphaBeta(board, 3, double.NegativeInfinity, double.PositiveInfinity, false, !board.IsWhiteToMove); // 3 seems to be the maximum reasonable search depth
+            double alphaBeta = AlphaBeta(board, 5, double.NegativeInfinity, double.PositiveInfinity, false, !board.IsWhiteToMove); // 3 seems to be the maximum reasonable search depth
             // focus on either improving the eval, or speeding up search somehow to get more depth out of it
             if(alphaBeta > bestOutcome){
                 bestOutcome = alphaBeta;
@@ -70,41 +39,17 @@ public class MyBot : IChessBot
     }
 
     // evaluate with negamax - scored relative to side specified
-    double Evaluate(Board board, bool perspective){
-        double score = 0;
-        // all evaluations in here are done from white's side, with positive good/negative bad. then depending on perspective, multiply by -1
+    double Evaluate(Board board, bool perspective){// all evaluations in here are done from white's side, with positive good/negative bad. then depending on perspective, multiply by -1
         // piece lists
         PieceList[] pieces = board.GetAllPieceLists(); // wp(0), wkn(1), wb(2), wr(3), wq(4), wk(5), bp(6), bkn(7), bb(8), br(9), bq(10), bk(11)
 
         //-----------MATERIAL----------
-        double material = pieceValueLookup[PieceType.King] * (pieces[5].Count - pieces[11].Count)
+        double score = pieceValueLookup[PieceType.King] * (pieces[5].Count - pieces[11].Count)
             + pieceValueLookup[PieceType.Queen] * (pieces[4].Count - pieces[10].Count)
             + pieceValueLookup[PieceType.Rook] * (pieces[3].Count - pieces[9].Count)
             + pieceValueLookup[PieceType.Knight] * (pieces[2].Count - pieces[8].Count)
             + pieceValueLookup[PieceType.Bishop] * (pieces[1].Count - pieces[7].Count)
             + pieceValueLookup[PieceType.Pawn] * (pieces[0].Count - pieces[6].Count);
-        score += material * 1; // weight all material
-
-        //----------MOBILITY----------
-        // figure out which squares each side can move to
-        ulong whiteMovesBb = 0;
-        ulong blackMovesBb = 0;
-        double pSqVals = 0;
-        for(int i = 0; i < 6; i++){ // piece by piece processing done in this block
-            PieceList white = pieces[i];
-            PieceList black = pieces[i + 6];
-            (ulong, double) info = EvaluateMobilityAndPieceSquareVals(board, white, true);
-            whiteMovesBb |= info.Item1;
-            pSqVals += info.Item2;
-            info = EvaluateMobilityAndPieceSquareVals(board, black, false);
-            blackMovesBb |= info.Item1;
-            pSqVals -= info.Item2;
-        }
-
-        //----------WEIGHTED SUM----------
-        score += (BitboardHelper.GetNumberOfSetBits(whiteMovesBb) - BitboardHelper.GetNumberOfSetBits(blackMovesBb)) * 0.1 // raw mobility
-                + pSqVals * 5 // piece square values
-                + material; // material
         
         //----------CHECKMATE----------
         if(board.IsInCheckmate()) score += board.IsWhiteToMove ? double.NegativeInfinity : double.PositiveInfinity;
@@ -114,10 +59,15 @@ public class MyBot : IChessBot
 
     // iterative version?
     double AlphaBeta(Board board, int depth, double a, double b, bool isMaximizing, bool perspective){
+        ulong zobristKey = board.ZobristKey;
+        if(transpTable.ContainsKey(zobristKey)) return transpTable[zobristKey].Item1; // hit in the transposition table! decide if it's worth it to keep searching?
         Move[] moves = board.GetLegalMoves();
         if(depth == 0 || moves.Length == 0){
-            return Evaluate(board, perspective);
+            double score = Evaluate(board, perspective);
+            transpTable.Add(zobristKey, (score, depth, 0)); // exact value node (leaf node)
+            return score;
         }
+
         double value;
         if(isMaximizing){
             value = double.NegativeInfinity;
@@ -128,41 +78,19 @@ public class MyBot : IChessBot
                 if(value > b) break;
                 a = Math.Max(a, value);
             }
+            if(!transpTable.ContainsKey(zobristKey)) transpTable.Add(zobristKey, (value, depth, 1)); // inner node
             return value;
         }
-        else{
-            value = double.PositiveInfinity;
-            foreach(Move move in moves){
-                board.MakeMove(move);
-                value = Math.Min(value, AlphaBeta(board, depth - 1, a, b, true, perspective));
-                board.UndoMove(move);
-                if(value < a) break;
-                b = Math.Min(b, value);
-            }
-            return value;
-        }
-    }
 
-    // ulong is bitboard of squares reachable by all pieces in piecelist
-    // double is total piece square value
-    (ulong, double) EvaluateMobilityAndPieceSquareVals(Board board, PieceList pieces, bool perspective){
-        ulong movesBb = 0;
-        double pSqVals = 0;
-        for(int j = 0; j < pieces.Count; j++){
-            Piece p = pieces[j];
-            movesBb |= BitboardHelper.GetPieceAttacks(p.PieceType, p.Square, board, perspective); // raw mobility
-            switch(p.PieceType){
-                case PieceType.Knight: // knight piece square
-                    pSqVals += knightValues[p.Square.Index];
-                    break;
-                case PieceType.Pawn:
-                    pSqVals += pawnValues[p.Square.Index];
-                    break;
-                case PieceType.Bishop:
-                    pSqVals += bishopValues[p.Square.Index];
-                    break;
-            }
+        value = double.PositiveInfinity;
+        foreach(Move move in moves){
+            board.MakeMove(move);
+            value = Math.Min(value, AlphaBeta(board, depth - 1, a, b, true, perspective));
+            board.UndoMove(move);
+            if(value < a) break;
+            b = Math.Min(b, value);
         }
-        return (movesBb, pSqVals);
+        if(!transpTable.ContainsKey(zobristKey)) transpTable.Add(zobristKey, (value, depth, 1)); // inner node
+        return value;
     }
 }
