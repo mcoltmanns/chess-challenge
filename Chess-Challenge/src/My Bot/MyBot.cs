@@ -4,6 +4,7 @@ using System;
 
 public class MyBot : IChessBot
 {
+    // elo 1300
     Dictionary<PieceType, double> pieceValueLookup = new Dictionary<PieceType, double>() // lookups for piece values
     {
         {PieceType.None, 0},
@@ -52,7 +53,6 @@ public class MyBot : IChessBot
     public Move Think(Board board, Timer timer)
     {
         Move[] allMoves = board.GetLegalMoves();
-
         Move moveToPlay = allMoves[new Random().Next(allMoves.Length)];
         double bestOutcome = double.NegativeInfinity;
         foreach(Move m in allMoves){
@@ -89,8 +89,9 @@ public class MyBot : IChessBot
 
             //----------HEURISTICS----------
             // castle bonus - avoid states in which we haven't castled! (2 pawns worth)
-            if(board.HasKingsideCastleRight(true) || board.HasQueensideCastleRight(true)) score -= 200; // avoid states in which we still have the right to castle
-            if(board.HasKingsideCastleRight(false) || board.HasQueensideCastleRight(false)) score += 200; // prefer states in which the opponent still has the right to castle
+            // castle bonus needs work - want to encourage the actual castle move, not just losing castle rights
+            if(board.HasKingsideCastleRight(true) || board.HasQueensideCastleRight(true)) score += 50; // prefer states in which we still have the right to castle
+            if(board.HasKingsideCastleRight(false) || board.HasQueensideCastleRight(false)) score -= 50; // avoid states in which the opponent still has the right to castle
 
             // bishop pair bonus (worth 1 additional bishop on top of the two)
             if(pieces[2].Count == 2) score += 350;
@@ -113,8 +114,8 @@ public class MyBot : IChessBot
             }
 
             //----------WEIGHTED SUM----------
-            score += (BitboardHelper.GetNumberOfSetBits(whiteMovesBb) - BitboardHelper.GetNumberOfSetBits(blackMovesBb)) * 0.2 // raw mobility
-                    + pSqVals * 10 // piece square values
+            score += (BitboardHelper.GetNumberOfSetBits(whiteMovesBb) - BitboardHelper.GetNumberOfSetBits(blackMovesBb)) * 0.1 // raw mobility
+                    + pSqVals * 5 // piece square values
                     + material; // material
             
             //----------CHECKMATE----------
