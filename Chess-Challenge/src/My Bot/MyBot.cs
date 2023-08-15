@@ -69,64 +69,60 @@ public class MyBot : IChessBot
         return moveToPlay;
     }
 
-    // evaluate with negamax - scored relative to side specified
-    double Evaluate(Board board, bool perspective){
-        double score = 0;
-        // all evaluations in here are done from white's side, with positive good/negative bad. then depending on perspective, multiply by -1
-        // piece lists
-        PieceList[] pieces = board.GetAllPieceLists(); // wp(0), wkn(1), wb(2), wr(3), wq(4), wk(5), bp(6), bkn(7), bb(8), br(9), bq(10), bk(11)
-
-        //-----------MATERIAL----------
-        double material = pieceValueLookup[PieceType.King] * (pieces[5].Count - pieces[11].Count)
-            + pieceValueLookup[PieceType.Queen] * (pieces[4].Count - pieces[10].Count)
-            + pieceValueLookup[PieceType.Rook] * (pieces[3].Count - pieces[9].Count)
-            + pieceValueLookup[PieceType.Knight] * (pieces[2].Count - pieces[8].Count)
-            + pieceValueLookup[PieceType.Bishop] * (pieces[1].Count - pieces[7].Count)
-            + pieceValueLookup[PieceType.Pawn] * (pieces[0].Count - pieces[6].Count);
-        score += material * 1; // weight all material
-
-        //----------HEURISTICS----------
-        // castle bonus - avoid states in which we haven't castled! (2 pawns worth)
-        if(board.HasKingsideCastleRight(true) || board.HasQueensideCastleRight(true)) score -= 200; // avoid states in which we still have the right to castle
-        if(board.HasKingsideCastleRight(false) || board.HasQueensideCastleRight(false)) score += 200; // prefer states in which the opponent still has the right to castle
-
-        // bishop pair bonus (worth 1 additional bishop on top of the two)
-        if(pieces[2].Count == 2) score += 350;
-        if(pieces[8].Count == 2) score -= 350;
-
-        //----------MOBILITY----------
-        // figure out which squares each side can move to
-        ulong whiteMovesBb = 0;
-        ulong blackMovesBb = 0;
-        double pSqVals = 0;
-        for(int i = 0; i < 6; i++){ // piece by piece processing done in this block
-            PieceList white = pieces[i];
-            PieceList black = pieces[i + 6];
-            (ulong, double) info = EvaluateMobilityAndPieceSquareVals(board, white, true);
-            whiteMovesBb |= info.Item1;
-            pSqVals += info.Item2;
-            info = EvaluateMobilityAndPieceSquareVals(board, black, false);
-            blackMovesBb |= info.Item1;
-            pSqVals -= info.Item2;
-        }
-
-        //----------WEIGHTED SUM----------
-        score += (BitboardHelper.GetNumberOfSetBits(whiteMovesBb) - BitboardHelper.GetNumberOfSetBits(blackMovesBb)) * 0.2 // raw mobility
-                + pSqVals * 10 // piece square values
-                + material; // material
-        
-        //----------CHECKMATE----------
-        if(board.IsInCheckmate()) score += board.IsWhiteToMove ? double.NegativeInfinity : double.PositiveInfinity;
-
-        return perspective ? score : -score; // positive good, negative bad!
-    }
-
     // iterative version?
     double AlphaBeta(Board board, int depth, double a, double b, bool isMaximizing, bool perspective){
         Move[] moves = board.GetLegalMoves();
-        if(depth == 0 || moves.Length == 0){
-            return Evaluate(board, perspective);
+        if(depth == 0 || moves.Length == 0) {
+            double score = 0;
+            // all evaluations in here are done from white's side, with positive good/negative bad. then depending on perspective, multiply by -1
+            // piece lists
+            PieceList[] pieces = board.GetAllPieceLists(); // wp(0), wkn(1), wb(2), wr(3), wq(4), wk(5), bp(6), bkn(7), bb(8), br(9), bq(10), bk(11)
+
+            //-----------MATERIAL----------
+            double material = pieceValueLookup[PieceType.King] * (pieces[5].Count - pieces[11].Count)
+                + pieceValueLookup[PieceType.Queen] * (pieces[4].Count - pieces[10].Count)
+                + pieceValueLookup[PieceType.Rook] * (pieces[3].Count - pieces[9].Count)
+                + pieceValueLookup[PieceType.Knight] * (pieces[2].Count - pieces[8].Count)
+                + pieceValueLookup[PieceType.Bishop] * (pieces[1].Count - pieces[7].Count)
+                + pieceValueLookup[PieceType.Pawn] * (pieces[0].Count - pieces[6].Count);
+            score += material * 1; // weight all material
+
+            //----------HEURISTICS----------
+            // castle bonus - avoid states in which we haven't castled! (2 pawns worth)
+            if(board.HasKingsideCastleRight(true) || board.HasQueensideCastleRight(true)) score -= 200; // avoid states in which we still have the right to castle
+            if(board.HasKingsideCastleRight(false) || board.HasQueensideCastleRight(false)) score += 200; // prefer states in which the opponent still has the right to castle
+
+            // bishop pair bonus (worth 1 additional bishop on top of the two)
+            if(pieces[2].Count == 2) score += 350;
+            if(pieces[8].Count == 2) score -= 350;
+
+            //----------MOBILITY----------
+            // figure out which squares each side can move to
+            ulong whiteMovesBb = 0;
+            ulong blackMovesBb = 0;
+            double pSqVals = 0;
+            for(int i = 0; i < 6; i++){ // piece by piece processing done in this block
+                PieceList white = pieces[i];
+                PieceList black = pieces[i + 6];
+                (ulong, double) info = EvaluateMobilityAndPieceSquareVals(board, white, true);
+                whiteMovesBb |= info.Item1;
+                pSqVals += info.Item2;
+                info = EvaluateMobilityAndPieceSquareVals(board, black, false);
+                blackMovesBb |= info.Item1;
+                pSqVals -= info.Item2;
+            }
+
+            //----------WEIGHTED SUM----------
+            score += (BitboardHelper.GetNumberOfSetBits(whiteMovesBb) - BitboardHelper.GetNumberOfSetBits(blackMovesBb)) * 0.2 // raw mobility
+                    + pSqVals * 10 // piece square values
+                    + material; // material
+            
+            //----------CHECKMATE----------
+            if(board.IsInCheckmate()) score += board.IsWhiteToMove ? double.NegativeInfinity : double.PositiveInfinity;
+
+            return perspective ? score : -score; // positive good, negative bad!
         }
+
         double value;
         if(isMaximizing){
             value = double.NegativeInfinity;
@@ -139,17 +135,15 @@ public class MyBot : IChessBot
             }
             return value;
         }
-        else{
-            value = double.PositiveInfinity;
-            foreach(Move move in moves){
-                board.MakeMove(move);
-                value = Math.Min(value, AlphaBeta(board, depth - 1, a, b, true, perspective));
-                board.UndoMove(move);
-                if(value < a) break;
-                b = Math.Min(b, value);
-            }
-            return value;
+        value = double.PositiveInfinity;
+        foreach(Move move in moves){
+            board.MakeMove(move);
+            value = Math.Min(value, AlphaBeta(board, depth - 1, a, b, true, perspective));
+            board.UndoMove(move);
+            if(value < a) break;
+            b = Math.Min(b, value);
         }
+        return value;
     }
 
     // ulong is bitboard of squares reachable by all pieces in piecelist
