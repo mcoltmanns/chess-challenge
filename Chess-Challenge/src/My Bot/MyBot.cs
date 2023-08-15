@@ -49,31 +49,22 @@ public class MyBot : IChessBot
         -2, -1, -1, -1, -1, -1, -1, -2
     };
 
-    int searchDepth = 2;
-
     public Move Think(Board board, Timer timer)
     {
         Move[] allMoves = board.GetLegalMoves();
 
-        Move moveToPlay = Move.NullMove;
+        Move moveToPlay = allMoves[new Random().Next(allMoves.Length)];
         double bestOutcome = double.NegativeInfinity;
         foreach(Move m in allMoves){
             board.MakeMove(m);
-            double alphaBeta = AlphaBeta(board, searchDepth, double.NegativeInfinity, double.PositiveInfinity, false, !board.IsWhiteToMove);
+            double alphaBeta = AlphaBeta(board, 3, double.NegativeInfinity, double.PositiveInfinity, false, !board.IsWhiteToMove); // 3 seems to be the maximum reasonable search depth
+            // focus on either improving the eval, or speeding up search somehow to get more depth out of it
             if(alphaBeta > bestOutcome){
                 bestOutcome = alphaBeta;
                 moveToPlay = m;
             }
             board.UndoMove(m);
         }
-
-        // deep searches are less important with fewer pieces on the board
-        // deep searches are probably more important in the endgame too (when fewer pieces are on the board)
-        /*
-        int searchLimit = 3;
-        // usually there are 40 moves per game, so should take about 1.5 sec per move
-        if(timer.MillisecondsElapsedThisTurn < 500 && searchDepth < searchLimit) searchDepth ++; // if we were fast, go deeper next round - constant is arbitrary, tweak as needed (maximum depth of 3!)
-        else if(timer.MillisecondsElapsedThisTurn > 1000) searchDepth --; // otherwise go shallower*/
 
         return moveToPlay;
     }
@@ -111,22 +102,16 @@ public class MyBot : IChessBot
         for(int i = 0; i < 6; i++){ // piece by piece processing done in this block
             PieceList white = pieces[i];
             PieceList black = pieces[i + 6];
-            (ulong, double) whiteInfo = EvaluateMobilityAndPieceSquareVals(board, white);
-            (ulong, double) blackInfo = EvaluateMobilityAndPieceSquareVals(board, black);
-            whiteMovesBb |= whiteInfo.Item1;
-            pSqVals += whiteInfo.Item2;
-            blackMovesBb |= blackInfo.Item1;
-            pSqVals -= blackInfo.Item2;
+            (ulong, double) info = EvaluateMobilityAndPieceSquareVals(board, white, true);
+            whiteMovesBb |= info.Item1;
+            pSqVals += info.Item2;
+            info = EvaluateMobilityAndPieceSquareVals(board, black, false);
+            blackMovesBb |= info.Item1;
+            pSqVals -= info.Item2;
         }
 
-        //----------CAPTURE----------
-        // what potential captures can we make from this position
-        //double captureScore = 0;
-        //foreach(Move m in board.GetLegalMoves(true)) captureScore += pieceValueLookup[m.CapturePieceType];
-
         //----------WEIGHTED SUM----------
-        score += /*(board.IsWhiteToMove ? captureScore : -captureScore) * 0.1 // captures are more important later on
-                +*/ (BitboardHelper.GetNumberOfSetBits(whiteMovesBb) - BitboardHelper.GetNumberOfSetBits(blackMovesBb)) * 0.2 // raw mobility
+        score += (BitboardHelper.GetNumberOfSetBits(whiteMovesBb) - BitboardHelper.GetNumberOfSetBits(blackMovesBb)) * 0.2 // raw mobility
                 + pSqVals * 10 // piece square values
                 + material; // material
         
@@ -169,12 +154,12 @@ public class MyBot : IChessBot
 
     // ulong is bitboard of squares reachable by all pieces in piecelist
     // double is total piece square value
-    (ulong, double) EvaluateMobilityAndPieceSquareVals(Board board, PieceList pieces){
+    (ulong, double) EvaluateMobilityAndPieceSquareVals(Board board, PieceList pieces, bool perspective){
         ulong movesBb = 0;
         double pSqVals = 0;
         for(int j = 0; j < pieces.Count; j++){
             Piece p = pieces[j];
-            movesBb |= BitboardHelper.GetPieceAttacks(p.PieceType, p.Square, board, true); // raw mobility
+            movesBb |= BitboardHelper.GetPieceAttacks(p.PieceType, p.Square, board, perspective); // raw mobility
             switch(p.PieceType){
                 case PieceType.Knight: // knight piece square
                     pSqVals += knightValues[p.Square.Index];
