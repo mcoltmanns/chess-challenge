@@ -85,15 +85,6 @@ public class MyBot : IChessBot
             + pieceValueLookup[PieceType.Pawn] * (pieces[0].Count - pieces[6].Count);
         score += material * 1; // weight all material
 
-        //----------HEURISTICS----------
-        // castle bonus - avoid states in which we haven't castled! (2 pawns worth)
-        if(board.HasKingsideCastleRight(true) || board.HasQueensideCastleRight(true)) score -= 200; // avoid states in which we still have the right to castle
-        if(board.HasKingsideCastleRight(false) || board.HasQueensideCastleRight(false)) score += 200; // prefer states in which the opponent still has the right to castle
-
-        // bishop pair bonus (worth 1 additional bishop on top of the two)
-        if(pieces[2].Count == 2) score += 350;
-        if(pieces[8].Count == 2) score -= 350;
-
         //----------MOBILITY----------
         // figure out which squares each side can move to
         ulong whiteMovesBb = 0;
@@ -111,8 +102,8 @@ public class MyBot : IChessBot
         }
 
         //----------WEIGHTED SUM----------
-        score += (BitboardHelper.GetNumberOfSetBits(whiteMovesBb) - BitboardHelper.GetNumberOfSetBits(blackMovesBb)) * 0.2 // raw mobility
-                + pSqVals * 10 // piece square values
+        score += (BitboardHelper.GetNumberOfSetBits(whiteMovesBb) - BitboardHelper.GetNumberOfSetBits(blackMovesBb)) * 0.1 // raw mobility
+                + pSqVals * 5 // piece square values
                 + material; // material
         
         //----------CHECKMATE----------
