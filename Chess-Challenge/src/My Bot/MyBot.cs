@@ -63,7 +63,13 @@ public class MyBot : IChessBot
         //----------CHECKMATE----------
         if(board.IsInCheckmate()) score += board.IsWhiteToMove ? double.NegativeInfinity : double.PositiveInfinity;
 
-        return perspective ? score : -score; // positive good, negative bad!
+        score = perspective ? score : -score; // apply negamax
+        // anything after this line is buffs/debuffs regardless of side
+
+        //----------REPEATS----------
+        foreach(ulong key in board.GameRepetitionHistory) if(key == board.ZobristKey) score -= 1000; // avoid repetitions
+
+        return score; // positive good, negative bad!
     }
 
     // iterative version?
