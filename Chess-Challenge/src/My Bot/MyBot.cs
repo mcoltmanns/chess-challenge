@@ -15,18 +15,25 @@ public class MyBot : IChessBot
         {PieceType.King, 20000}
     };
 
-    Dictionary<ulong, (double, int, int)> transpTable = new Dictionary<ulong, (double, int, int)>(); // transposition table: zobristkey -> score, depth, node type (0: true value - 1: upper bound - 2: lower bound)
+    Dictionary<ulong, double> transpTable = new Dictionary<ulong, double>(); // transposition table: zobristkey -> score
 
     public Move Think(Board board, Timer timer)
     {
         Move[] moves = board.GetLegalMoves();
 
+        // iterative depening?
+        // assume 45 moves per game
+        // this comes to 1333ms per move
+        // if we take more than 45 moves i guess just give 1000ms per move
+        int movesLeft = 45 - board.PlyCount / 2;
+        int allowedTime = timer.MillisecondsRemaining / movesLeft;
+        Console.WriteLine("predicting " + movesLeft + " moves left in game. allotted move time is " + allowedTime + "ms");
+
         Move moveToPlay = moves[new Random().Next(moves.Length)];
         double bestOutcome = double.NegativeInfinity;
         foreach(Move m in moves){
             board.MakeMove(m);
-            double alphaBeta = AlphaBeta(board, 4, double.NegativeInfinity, double.PositiveInfinity, false, !board.IsWhiteToMove); // 3 seems to be the maximum reasonable search depth
-            // focus on either improving the eval, or speeding up search somehow to get more depth out of it
+            double alphaBeta = AlphaBeta(board, 3, double.NegativeInfinity, double.PositiveInfinity, false, !board.IsWhiteToMove); // 3 seems to be the maximum reasonable search depth
             if(alphaBeta > bestOutcome){
                 bestOutcome = alphaBeta;
                 moveToPlay = m;
@@ -78,46 +85,37 @@ public class MyBot : IChessBot
     // iterative version?
     double AlphaBeta(Board board, int depth, double a, double b, bool isMaximizing, bool perspective){
         ulong zobristKey = board.ZobristKey;
-        if(transpTable.ContainsKey(zobristKey) && transpTable[zobristKey].Item3 != 0) return transpTable[zobristKey].Item1; // hit in the transposition table! if it was a bound (pruned anyways), return that bound
+        if(transpTable.ContainsKey(zobristKey)) return transpTable[zobristKey]; // hit in the transposition table!
         Move[] moves = board.GetLegalMoves();
         if(depth == 0 || moves.Length == 0){
             double score = Evaluate(board, perspective);
-            if(!transpTable.ContainsKey(zobristKey)) transpTable.Add(zobristKey, (score, depth, 0)); // exact value node (leaf node)
+            if(!transpTable.ContainsKey(zobristKey)) transpTable.Add(zobristKey, score); // exact value node (leaf node)
             return score;
         }
 
         double value;
-        int bound;
         if(isMaximizing){
             value = double.NegativeInfinity;
-            bound = 0;
             foreach(Move move in moves){
                 board.MakeMove(move);
                 value = Math.Max(value, AlphaBeta(board, depth - 1, a, b, false, perspective)); 
                 board.UndoMove(move);
-                if(value > b) {
-                    bound = 1;
-                    break;
-                }
+                if(value > b) break;
                 a = Math.Max(a, value);
             }
-            if(!transpTable.ContainsKey(zobristKey)) transpTable.Add(zobristKey, (value, depth, bound)); // inner node
+            if(!transpTable.ContainsKey(zobristKey)) transpTable.Add(zobristKey, value); // inner node
             return value;
         }
 
         value = double.PositiveInfinity;
-        bound = 0;
         foreach(Move move in moves){
             board.MakeMove(move);
             value = Math.Min(value, AlphaBeta(board, depth - 1, a, b, true, perspective));
             board.UndoMove(move);
-            if(value < a) {
-                bound = 1;
-                break;
-            }
+            if(value < a) break;
             b = Math.Min(b, value);
         }
-        if(!transpTable.ContainsKey(zobristKey)) transpTable.Add(zobristKey, (value, depth, bound)); // inner node
+        if(!transpTable.ContainsKey(zobristKey)) transpTable.Add(zobristKey, value); // inner node
         return value;
     }
 }
