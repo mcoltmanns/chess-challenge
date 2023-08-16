@@ -19,8 +19,7 @@ public class MyBot : IChessBot
 
     public Move Think(Board board, Timer timer)
     {
-        System.Span<Move> moves = stackalloc Move[40];
-        board.GetLegalMovesNonAlloc(ref moves);
+        Move[] moves = board.GetLegalMoves();
 
         Move moveToPlay = moves[new Random().Next(moves.Length)];
         double bestOutcome = double.NegativeInfinity;
@@ -59,6 +58,10 @@ public class MyBot : IChessBot
         // bishop pair bonus (worth 1 additional bishop on top of the two)
         if(pieces[2].Count == 2) score += 350;
         if(pieces[8].Count == 2) score -= 350;
+
+        //----------MOBILITY----------
+        double mobility = board.GetLegalMoves().Length * 0.1;
+        score += board.IsWhiteToMove ? mobility : -mobility;
         
         //----------CHECKMATE----------
         if(board.IsInCheckmate()) score += board.IsWhiteToMove ? double.NegativeInfinity : double.PositiveInfinity;
