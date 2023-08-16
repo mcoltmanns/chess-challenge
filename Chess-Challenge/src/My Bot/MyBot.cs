@@ -73,22 +73,20 @@ public class MyBot : IChessBot
     double AlphaBeta(Board board, int depth, double a, double b, bool isMaximizing, bool perspective){
         Move[] moves = board.GetLegalMoves();
         if(depth == 0 || moves.Length == 0) {
-            double score = 0;
             // all evaluations in here are done from white's side, with positive good/negative bad. then depending on perspective, multiply by -1
             // piece lists
             PieceList[] pieces = board.GetAllPieceLists(); // wp(0), wkn(1), wb(2), wr(3), wq(4), wk(5), bp(6), bkn(7), bb(8), br(9), bq(10), bk(11)
 
             //-----------MATERIAL----------
-            double material = pieceValueLookup[PieceType.King] * (pieces[5].Count - pieces[11].Count)
+            double score = pieceValueLookup[PieceType.King] * (pieces[5].Count - pieces[11].Count)
                 + pieceValueLookup[PieceType.Queen] * (pieces[4].Count - pieces[10].Count)
                 + pieceValueLookup[PieceType.Rook] * (pieces[3].Count - pieces[9].Count)
                 + pieceValueLookup[PieceType.Knight] * (pieces[2].Count - pieces[8].Count)
                 + pieceValueLookup[PieceType.Bishop] * (pieces[1].Count - pieces[7].Count)
                 + pieceValueLookup[PieceType.Pawn] * (pieces[0].Count - pieces[6].Count);
-            score += material * 1; // weight all material
 
             //----------HEURISTICS----------
-            // castle bonus - avoid states in which we haven't castled! (2 pawns worth)
+            // castle bonus - avoid states in which we haven't castled! (1/2 pawns worth)
             // castle bonus needs work - want to encourage the actual castle move, not just losing castle rights
             if(board.HasKingsideCastleRight(true) || board.HasQueensideCastleRight(true)) score += 50; // prefer states in which we still have the right to castle
             if(board.HasKingsideCastleRight(false) || board.HasQueensideCastleRight(false)) score -= 50; // avoid states in which the opponent still has the right to castle
@@ -97,31 +95,37 @@ public class MyBot : IChessBot
             if(pieces[2].Count == 2) score += 350;
             if(pieces[8].Count == 2) score -= 350;
 
+            // maybe some kind of pawn structure heuristic? make sure pawns are protected?
+
             //----------MOBILITY----------
             // figure out which squares each side can move to
-            ulong whiteMovesBb = 0;
-            ulong blackMovesBb = 0;
+            double mobility = 0;
             double pSqVals = 0;
             for(int i = 0; i < 6; i++){ // piece by piece processing done in this block
                 PieceList white = pieces[i];
                 PieceList black = pieces[i + 6];
-                (ulong, double) info = EvaluateMobilityAndPieceSquareVals(board, white, true);
-                whiteMovesBb |= info.Item1;
+                (double, double) info = EvaluateMobilityAndPieceSquareVals(board, white, true);
+                mobility += info.Item1;
                 pSqVals += info.Item2;
                 info = EvaluateMobilityAndPieceSquareVals(board, black, false);
-                blackMovesBb |= info.Item1;
+                mobility -= info.Item1;
                 pSqVals -= info.Item2;
             }
 
             //----------WEIGHTED SUM----------
-            score += (BitboardHelper.GetNumberOfSetBits(whiteMovesBb) - BitboardHelper.GetNumberOfSetBits(blackMovesBb)) * 0.1 // raw mobility
-                    + pSqVals * 5 // piece square values
-                    + material; // material
+            score += mobility * 0.2 // raw mobility
+                    + pSqVals * 5; // piece square values
             
             //----------CHECKMATE----------
             if(board.IsInCheckmate()) score += board.IsWhiteToMove ? double.NegativeInfinity : double.PositiveInfinity;
 
-            return perspective ? score : -score; // positive good, negative bad!
+            score = perspective ? score : -score; // negamax
+            // beyond here are global buffs/debuffs
+
+            //----------REPEATS----------
+            foreach(ulong key in board.GameRepetitionHistory) if(key == board.ZobristKey) score -= 1000; // avoid repetitions
+
+            return score;
         }
 
         double value;
@@ -147,9 +151,9 @@ public class MyBot : IChessBot
         return value;
     }
 
-    // ulong is bitboard of squares reachable by all pieces in piecelist
+    // double is number of squares reachable by all pieces in piecelist
     // double is total piece square value
-    (ulong, double) EvaluateMobilityAndPieceSquareVals(Board board, PieceList pieces, bool perspective){
+    (double, double) EvaluateMobilityAndPieceSquareVals(Board board, PieceList pieces, bool perspective){
         ulong movesBb = 0;
         double pSqVals = 0;
         for(int j = 0; j < pieces.Count; j++){
@@ -167,6 +171,6 @@ public class MyBot : IChessBot
                     break;
             }
         }
-        return (movesBb, pSqVals);
+        return (BitboardHelper.GetNumberOfSetBits(movesBb), pSqVals);
     }
 }
