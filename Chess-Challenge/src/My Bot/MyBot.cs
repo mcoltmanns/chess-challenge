@@ -15,7 +15,8 @@ public class MyBot : IChessBot
         {PieceType.King, 20000}
     };
 
-    Dictionary<ulong, double> transpTable = new Dictionary<ulong, double>(); // transposition table: zobristkey -> score
+    Dictionary<ulong, (double, bool)> transpTable = new Dictionary<ulong, (double, bool)>(); // zobristkey -> best score, best move, depth found at, type (-1 lower bound, 0 exact, 1 upper bound)
+    int capacity = 1000000; // 1 million entries allowed
 
     public Move Think(Board board, Timer timer)
     {
@@ -26,19 +27,26 @@ public class MyBot : IChessBot
         // this comes to 1333ms per move
         // if we take more than 45 moves i guess just give 1000ms per move
         int movesLeft = 45 - board.PlyCount / 2;
-        int allowedTime = timer.MillisecondsRemaining / movesLeft;
+        int allowedTime = 500;//timer.MillisecondsRemaining / movesLeft;
         Console.WriteLine("predicting " + movesLeft + " moves left in game. allotted move time is " + allowedTime + "ms");
 
+        transpTable.Clear();
+
+        int depth = 0;
         Move moveToPlay = moves[new Random().Next(moves.Length)];
-        double bestOutcome = double.NegativeInfinity;
-        foreach(Move m in moves){
-            board.MakeMove(m);
-            double alphaBeta = AlphaBeta(board, 3, double.NegativeInfinity, double.PositiveInfinity, false, !board.IsWhiteToMove); // 3 seems to be the maximum reasonable search depth
-            if(alphaBeta > bestOutcome){
-                bestOutcome = alphaBeta;
-                moveToPlay = m;
+        while(timer.MillisecondsElapsedThisTurn < allowedTime){
+            Console.WriteLine("searching to depth of " + depth);
+            double bestOutcome = double.NegativeInfinity;
+            foreach(Move m in moves){
+                board.MakeMove(m);
+                double alphaBeta = AlphaBeta(board, depth, double.NegativeInfinity, double.PositiveInfinity, false, !board.IsWhiteToMove); // 3 seems to be the maximum reasonable search depth
+                if(alphaBeta > bestOutcome){
+                    bestOutcome = alphaBeta;
+                    moveToPlay = m;
+                }
+                board.UndoMove(m);
             }
-            board.UndoMove(m);
+            depth++;
         }
 
         // can turn ranks into numbers via char.ToUpper(*rank*) - 64
@@ -75,7 +83,7 @@ public class MyBot : IChessBot
         foreach(PieceList pl in pieces){
             foreach(Piece p in pl) {
                 Square s = p.Square;
-                double gaussian = -Math.Exp(Math.Pow(s.Rank - 3.5, 2) / 11.2338) - Math.Exp(Math.Pow(s.File - 3.5, 2) / 11.2338) + 6; // use the addition of two gaussian curves to calculate the positional score ramps
+                double gaussian = -Math.Exp(Math.Pow(s.Rank - 3.5, 2) / 11.23) - Math.Exp(Math.Pow(s.File - 3.5, 2) / 11.23) + 6; // use the addition of two gaussian curves to calculate the positional score ramps
                 positioning += p.IsWhite ? gaussian : -gaussian;
             }
         }
@@ -93,40 +101,47 @@ public class MyBot : IChessBot
         return score; // positive good, negative bad!
     }
 
-    // iterative version?
     double AlphaBeta(Board board, int depth, double a, double b, bool isMaximizing, bool perspective){
-        ulong zobristKey = board.ZobristKey;
-        //if(transpTable.ContainsKey(zobristKey)) return transpTable[zobristKey]; // hit in the transposition table!
-        Move[] moves = board.GetLegalMoves();
-        if(depth == 0 || moves.Length == 0){
-            double score = Evaluate(board, perspective);
-            //if(!transpTable.ContainsKey(zobristKey)) transpTable.Add(zobristKey, score); // exact value node (leaf node)
-            return score;
+        if(transpTable.TryGetValue(board.ZobristKey, out (double, bool) info)){ // got a hit
+            if(info.Item2) return info.Item1; // bounds don't need to be searched any deeper
         }
 
+        Move[] moves = board.GetLegalMoves();
         double value;
-        if(isMaximizing){
+        bool bound = false;
+
+        if(depth == 0 || moves.Length == 0) {
+            value = Evaluate(board, perspective);
+        }
+        else if(isMaximizing){
             value = double.NegativeInfinity;
             foreach(Move move in moves){
                 board.MakeMove(move);
                 value = Math.Max(value, AlphaBeta(board, depth - 1, a, b, false, perspective)); 
                 board.UndoMove(move);
-                if(value > b) break;
+                if(value > b) {
+                    bound = true;
+                    break; // upper bound
+                }
                 a = Math.Max(a, value);
             }
-            //if(!transpTable.ContainsKey(zobristKey)) transpTable.Add(zobristKey, value); // inner node
-            return value;
+        }
+        else{
+            value = double.PositiveInfinity;
+            foreach(Move move in moves){
+                board.MakeMove(move);
+                value = Math.Min(value, AlphaBeta(board, depth - 1, a, b, true, perspective));
+                board.UndoMove(move);
+                if(value < a) {
+                    bound = true;
+                    break; // lower bound
+                }
+                b = Math.Min(b, value);
+            }
         }
 
-        value = double.PositiveInfinity;
-        foreach(Move move in moves){
-            board.MakeMove(move);
-            value = Math.Min(value, AlphaBeta(board, depth - 1, a, b, true, perspective));
-            board.UndoMove(move);
-            if(value < a) break;
-            b = Math.Min(b, value);
-        }
-        //if(!transpTable.ContainsKey(zobristKey)) transpTable.Add(zobristKey, value); // inner node
+        if(!transpTable.TryAdd(board.ZobristKey, (value, bound))) transpTable[board.ZobristKey] = (value, bound); // always overwrite existing keys, since the pruning is taken care of in AlphaBeta()
+
         return value;
     }
 }
