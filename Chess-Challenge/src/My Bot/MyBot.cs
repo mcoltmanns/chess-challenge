@@ -15,6 +15,17 @@ public class MyBot : IChessBot
         {PieceType.King, 20000}
     };
 
+    double[] rSquareVals = {
+        28, 32, 34, 34, 34, 34, 32, 28,
+        32, 39, 43, 43, 43, 43, 39, 32,
+        34, 43, 49, 49, 49, 49, 43, 34,
+        34, 43, 49, 51, 51, 49, 43, 34,
+        34, 43, 49, 51, 51, 49, 43, 34,
+        34, 43, 49, 49, 49, 49, 43, 34,
+        32, 39, 43, 43, 43, 43, 39, 32,
+        28, 32, 34, 34, 34, 34, 32, 28
+    };
+
     Dictionary<ulong, double> transpTable = new Dictionary<ulong, double>(); // transposition table: zobristkey -> score
 
     public Move Think(Board board, Timer timer)
@@ -58,10 +69,6 @@ public class MyBot : IChessBot
             + pieceValueLookup[PieceType.Pawn] * (pieces[0].Count - pieces[6].Count);
 
         //----------HEURISTICS----------
-        // castle bonus - avoid states in which we haven't castled! (2 pawns worth)
-        if(board.HasKingsideCastleRight(true) || board.HasQueensideCastleRight(true)) score -= 200; // avoid states in which we still have the right to castle
-        if(board.HasKingsideCastleRight(false) || board.HasQueensideCastleRight(false)) score += 200; // prefer states in which the opponent still has the right to castle
-
         // bishop pair bonus (worth 1 additional bishop on top of the two)
         if(pieces[2].Count == 2) score += 350;
         if(pieces[8].Count == 2) score -= 350;
@@ -69,6 +76,13 @@ public class MyBot : IChessBot
         //----------MOBILITY----------
         double mobility = board.GetLegalMoves().Length * 0.1;
         score += board.IsWhiteToMove ? mobility : -mobility;
+
+        //----------POSITIONING----------
+        double positioning = 0;
+        foreach(PieceList pl in pieces){
+            foreach(Piece p in pl) positioning += p.IsWhite ? rSquareVals[p.Square.Index] : -rSquareVals[p.Square.Index];
+        }
+        score += positioning * 0.5;
         
         //----------CHECKMATE----------
         if(board.IsInCheckmate()) score += board.IsWhiteToMove ? double.NegativeInfinity : double.PositiveInfinity;
@@ -77,7 +91,7 @@ public class MyBot : IChessBot
         // anything after this line is buffs/debuffs regardless of side
 
         //----------REPEATS----------
-        foreach(ulong key in board.GameRepetitionHistory) if(key == board.ZobristKey) score -= 1000; // avoid repetitions
+        foreach(ulong key in board.GameRepetitionHistory) if(key == board.ZobristKey) score -= 1000000; // avoid repetitions
 
         return score; // positive good, negative bad!
     }
@@ -85,11 +99,11 @@ public class MyBot : IChessBot
     // iterative version?
     double AlphaBeta(Board board, int depth, double a, double b, bool isMaximizing, bool perspective){
         ulong zobristKey = board.ZobristKey;
-        if(transpTable.ContainsKey(zobristKey)) return transpTable[zobristKey]; // hit in the transposition table!
+        //if(transpTable.ContainsKey(zobristKey)) return transpTable[zobristKey]; // hit in the transposition table!
         Move[] moves = board.GetLegalMoves();
         if(depth == 0 || moves.Length == 0){
             double score = Evaluate(board, perspective);
-            if(!transpTable.ContainsKey(zobristKey)) transpTable.Add(zobristKey, score); // exact value node (leaf node)
+            //if(!transpTable.ContainsKey(zobristKey)) transpTable.Add(zobristKey, score); // exact value node (leaf node)
             return score;
         }
 
@@ -103,7 +117,7 @@ public class MyBot : IChessBot
                 if(value > b) break;
                 a = Math.Max(a, value);
             }
-            if(!transpTable.ContainsKey(zobristKey)) transpTable.Add(zobristKey, value); // inner node
+            //if(!transpTable.ContainsKey(zobristKey)) transpTable.Add(zobristKey, value); // inner node
             return value;
         }
 
@@ -115,7 +129,7 @@ public class MyBot : IChessBot
             if(value < a) break;
             b = Math.Min(b, value);
         }
-        if(!transpTable.ContainsKey(zobristKey)) transpTable.Add(zobristKey, value); // inner node
+        //if(!transpTable.ContainsKey(zobristKey)) transpTable.Add(zobristKey, value); // inner node
         return value;
     }
 }
