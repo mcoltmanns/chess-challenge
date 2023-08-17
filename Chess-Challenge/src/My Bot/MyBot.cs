@@ -15,17 +15,6 @@ public class MyBot : IChessBot
         {PieceType.King, 20000}
     };
 
-    double[] rSquareVals = {
-        28, 32, 34, 34, 34, 34, 32, 28,
-        32, 39, 43, 43, 43, 43, 39, 32,
-        34, 43, 49, 49, 49, 49, 43, 34,
-        34, 43, 49, 51, 51, 49, 43, 34,
-        34, 43, 49, 51, 51, 49, 43, 34,
-        34, 43, 49, 49, 49, 49, 43, 34,
-        32, 39, 43, 43, 43, 43, 39, 32,
-        28, 32, 34, 34, 34, 34, 32, 28
-    };
-
     Dictionary<ulong, double> transpTable = new Dictionary<ulong, double>(); // transposition table: zobristkey -> score
 
     public Move Think(Board board, Timer timer)
@@ -51,6 +40,10 @@ public class MyBot : IChessBot
             }
             board.UndoMove(m);
         }
+
+        // can turn ranks into numbers via char.ToUpper(*rank*) - 64
+        // could be good for turning the rsquarevals into a function
+        // seems logarithmic - outer files are much worse than inner files
 
         return moveToPlay;
     }
@@ -80,7 +73,11 @@ public class MyBot : IChessBot
         //----------POSITIONING----------
         double positioning = 0;
         foreach(PieceList pl in pieces){
-            foreach(Piece p in pl) positioning += p.IsWhite ? rSquareVals[p.Square.Index] : -rSquareVals[p.Square.Index];
+            foreach(Piece p in pl) {
+                Square s = p.Square;
+                double gaussian = -Math.Exp(Math.Pow(s.Rank - 3.5, 2) / 11.2338) - Math.Exp(Math.Pow(s.File - 3.5, 2) / 11.2338) + 6; // use the addition of two gaussian curves to calculate the positional score ramps
+                positioning += p.IsWhite ? gaussian : -gaussian;
+            }
         }
         score += positioning * 0.5;
         
